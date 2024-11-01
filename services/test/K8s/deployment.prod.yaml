@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: udecrypt-image-service-deployment
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: udecrypt-image-service
+    template:
+        metadata:
+            labels:
+                app: udecrypt-image-service
+            annotations:
+                dapr.io/app-id: udecrypt-image-service
+                dapr.io/app-port: "80"
+                dapr.io/app-protocol: grpc
+                dapr.io/enabled: "true"
+        spec:
+            containers:
+                - name: udecrypt-image-service
+                  image: udecrypt_image:1.0.1
+                  imagePullPolicy: IfNotPresent
+                  ports:
+                    - containerPort: 80
+                  resources:
+                    requests:
+                        cpu: 125m
+                        memory: 128Mi
+                    limits:
+                        cpu: 250m
+                        memory: 256Mi
+                  envFrom:
+                    - configMapRef:
+                        name: shared-environment
+            imagePullSecrets: []

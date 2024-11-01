@@ -1,0 +1,42 @@
+{
+  "DockerImagePrefix": "udecrypt",
+  "DockerContainerRegistry": {
+    "Dev": "",
+    "Prod": "registry.gitlab.com/udecrypt/server"
+  },
+  "BuildOutputDirectory": "build",
+  "KbernetesConfig": {
+    "Directory": {
+      "Go": "k8s",
+      "Dotnet": "K8s"
+    },
+    "Files": {
+      "Dev": {
+        "Deployment": "deployment.dev.yaml",
+        "Service": "service.yaml"
+      },
+      "Prod": {
+        "Deployment": "deployment.prod.yaml",
+        "Service": "service.yaml"
+      }
+    }
+  },
+  "ServicesDirectory": {
+    "Root": {
+      "Go": "services/go",
+      "Dotnet": "services/dotnet"
+    },
+    "All": {
+      "Go": {
+        "ImageService": "image",
+        "FileService": "file",
+        "Blockchain": "blockchain"
+      },
+      "Dotnet": {
+        "Auth": "UDecrypt.Authentication.Service.API",
+        "MetadataExtractor": "UDecrypt.MetaData.Extractor.Service.API",
+        "Billing": "UDecrypt.MetaData.Extractor.Billing.Service.API"
+      }
+    }
+  }
+}
