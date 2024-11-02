@@ -45,6 +45,7 @@ func GetServiceDirectoryRoot(cfg *types.K8sDeployerConfig, cwd, serviceType, ser
 		}
 
 		serviceDirectoryRoot = path.Join(
+			cwd,
 			cfg.ServicesDirectory.Root.Go,
 			cfg.ServicesDirectory.All.Go[serviceName],
 		)
@@ -57,6 +58,7 @@ func GetServiceDirectoryRoot(cfg *types.K8sDeployerConfig, cwd, serviceType, ser
 		}
 
 		serviceDirectoryRoot = path.Join(
+			cwd,
 			cfg.ServicesDirectory.Root.Dotnet,
 			cfg.ServicesDirectory.All.Dotnet[serviceName],
 		)

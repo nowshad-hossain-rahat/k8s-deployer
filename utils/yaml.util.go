@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"strconv"
 	"strings"
@@ -80,13 +79,13 @@ func GetDeploymentAndServiceYamlPaths(
 func ParseYaml(yamlPath string) (*types.Deployment, error) {
 	data, err := os.ReadFile(yamlPath)
 	if err != nil {
-		return nil, fmt.Errorf("[!] Error reading YAML file: %v\n", err)
+		return nil, fmt.Errorf("error reading YAML file: %v", err)
 	}
 
 	var deployment types.Deployment
 	err = yaml.Unmarshal(data, &deployment)
 	if err != nil {
-		return nil, fmt.Errorf("[!] Error parsing YAML file: %v\n", err)
+		return nil, fmt.Errorf("error parsing YAML file: %v", err)
 	}
 
 	return &deployment, nil
@@ -120,18 +119,18 @@ func ParseVersion(dockerImage string) (string, string) {
 	if versionStr == "" {
 		versionStr = "1.0.0"
 
-		fmt.Println("Image: ", dockerImage)
-		fmt.Println("No version was set in YAML for the Docker image. Using default version: 1.0.0")
+		fmt.Println("[+] Image: ", dockerImage)
+		fmt.Println("[!] No version was set in YAML for the Docker image. Using default version: 1.0.0")
 	} else {
-		fmt.Println("Image: ", dockerImage)
-		fmt.Println("Current Version: ", versionStr)
+		fmt.Println("[+] Image: ", dockerImage)
+		fmt.Println("[+] Current Version: ", versionStr)
 	}
 
 	majorStr := versionStr[:1]
 	minorStr := versionStr[2:3]
 	patchStr := versionStr[4:]
 
-	if majorStr != "" || minorStr != "" || patchStr != "" {
+	if majorStr == "" || minorStr == "" || patchStr == "" {
 		majorStr = "1"
 		minorStr = "0"
 		patchStr = "0"
@@ -170,147 +169,92 @@ func ParseVersion(dockerImage string) (string, string) {
 	return versionStr, newVersion
 }
 
-func BuildAndDeploy() {
-	if len(os.Args) < 3 {
-		fmt.Println("[!] Not enough arguments provided. Usage: go run main.go <SERVICE_NAME> <DOCKER_TAG> [IMAGE_VERSION]")
-		os.Exit(1)
+func ParseDockerImagePath(cfg *types.K8sDeployerConfig, mode, serviceName, version string) string {
+	containerRegistry := cfg.DockerContainerRegistry.Dev
+
+	if mode == constants.Prod {
+		containerRegistry = cfg.DockerContainerRegistry.Prod
 	}
 
-	serviceName := os.Args[1]
-	dockerTag := os.Args[2]
-	imageVersion := "latest"
-	if len(os.Args) > 3 {
-		imageVersion = os.Args[3]
+	dockerTag := fmt.Sprintf("%s_%s", cfg.DockerImagePrefix, serviceName)
+
+	if cfg.DockerImagePrefix == "" {
+		dockerTag = serviceName
 	}
 
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("[!] Failed to get project root: %v\n", err)
-		os.Exit(1)
+	dockerImage := path.Join(containerRegistry, dockerTag)
+
+	if version == "" {
+		version = "1.0.0"
 	}
 
-	if err := cleanDockerTagFile(dockerTag); err != nil {
-		os.Exit(1)
-	}
-
-	if err := buildBinary(serviceName, dockerTag); err != nil {
-		os.Exit(1)
-	}
-
-	if err := buildDockerImage(dockerTag, imageVersion); err != nil {
-		os.Exit(1)
-	}
-
-	if err := removeMinikubeImage(dockerTag, imageVersion); err != nil {
-		os.Exit(1)
-	}
-
-	if err := loadImageToMinikube(dockerTag, imageVersion); err != nil {
-		os.Exit(1)
-	}
-
-	if err := deleteK8sPod(serviceName); err != nil {
-		os.Exit(1)
-	}
-
-	if err := deployToKubernetes(projectRoot, serviceName); err != nil {
-		os.Exit(1)
-	}
-
-	fmt.Printf("[+] %s-service deployed successfully.\n", serviceName)
+	return fmt.Sprintf("%s:%s", dockerImage, version)
 }
 
-func cleanDockerTagFile(dockerTag string) error {
-	if _, err := os.Stat(dockerTag); err == nil {
-		fmt.Printf("[+] Found existing file %s. Deleting it...\n", dockerTag)
-		if err := os.Remove(dockerTag); err != nil {
-			return fmt.Errorf("[!] Failed to delete old file %s: %v", dockerTag, err)
-		}
-		fmt.Printf("[+] Deleted old file %s.\n", dockerTag)
+func ParseServiceName(prefix, serviceName string) string {
+	if prefix == "" {
+		return serviceName
 	} else {
-		fmt.Printf("[+] No previous file %s found.\n", dockerTag)
+		return fmt.Sprintf("%s-%s-service", prefix, serviceName)
 	}
-	return nil
 }
 
-func buildBinary(serviceName, dockerTag string) error {
-	fmt.Printf("[+] Building %s-service binary...\n", serviceName)
-	cmd := exec.Command("go", "build", "-o", "./build/"+dockerTag)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to build %s binary: %v", dockerTag, err)
-	}
-	return nil
-}
+// func cleanDockerTagFile(dockerTag string) error {
+// 	if _, err := os.Stat(dockerTag); err == nil {
+// 		fmt.Printf("[+] Found existing file %s. Deleting it...\n", dockerTag)
+// 		if err := os.Remove(dockerTag); err != nil {
+// 			return fmt.Errorf("[!] Failed to delete old file %s: %v", dockerTag, err)
+// 		}
+// 		fmt.Printf("[+] Deleted old file %s.\n", dockerTag)
+// 	} else {
+// 		fmt.Printf("[+] No previous file %s found.\n", dockerTag)
+// 	}
+// 	return nil
+// }
 
-func buildDockerImage(dockerTag, imageVersion string) error {
-	fmt.Println("[+] Building docker image...")
-	cmd := exec.Command("docker", "build", "-t", fmt.Sprintf("%s:%s", dockerTag, imageVersion), ".")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to build Docker image for %s: %v", dockerTag, err)
-	}
-	return nil
-}
+// func deleteK8sPod(serviceName string) error {
+// 	cmd := exec.Command("kubectl", "delete", "pod", "-l", fmt.Sprintf("app=%s-service", serviceName))
+// 	if err := cmd.Run(); err != nil {
+// 		return fmt.Errorf("[!] Failed to delete existing pod: %v", err)
+// 	}
+// 	return nil
+// }
 
-func removeMinikubeImage(dockerTag, imageVersion string) error {
-	cmd := exec.Command("minikube", "ssh", "--", "docker", "rmi", fmt.Sprintf("%s:%s", dockerTag, imageVersion), "--force")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to remove existing Docker image from Minikube: %v", err)
-	}
-	return nil
-}
+// func deployToKubernetes(projectRoot, serviceName string) error {
+// 	fmt.Printf("[+] Deploying %s-service to Kubernetes...\n", serviceName)
 
-func loadImageToMinikube(dockerTag, imageVersion string) error {
-	fmt.Printf("[->] Loading docker image of %s-service to minikube...\n", dockerTag)
-	cmd := exec.Command("minikube", "image", "load", fmt.Sprintf("%s:%s", dockerTag, imageVersion))
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to load Docker image into Minikube: %v", err)
-	}
-	return nil
-}
+// 	deploymentFile := fmt.Sprintf("%s/k8s/deployment.dev.yaml", projectRoot)
+// 	serviceFile := fmt.Sprintf("%s/k8s/service.yaml", projectRoot)
 
-func deleteK8sPod(serviceName string) error {
-	cmd := exec.Command("kubectl", "delete", "pod", "-l", fmt.Sprintf("app=%s-service", serviceName))
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to delete existing pod: %v", err)
-	}
-	return nil
-}
+// 	if err := checkK8sManifestExists(deploymentFile, serviceFile); err != nil {
+// 		return err
+// 	}
 
-func deployToKubernetes(projectRoot, serviceName string) error {
-	fmt.Printf("[+] Deploying %s-service to Kubernetes...\n", serviceName)
+// 	if err := applyK8sManifest(deploymentFile); err != nil {
+// 		return err
+// 	}
 
-	deploymentFile := fmt.Sprintf("%s/k8s/deployment.dev.yaml", projectRoot)
-	serviceFile := fmt.Sprintf("%s/k8s/service.yaml", projectRoot)
+// 	if err := applyK8sManifest(serviceFile); err != nil {
+// 		return err
+// 	}
 
-	if err := checkK8sManifestExists(deploymentFile, serviceFile); err != nil {
-		return err
-	}
+// 	return nil
+// }
 
-	if err := applyK8sManifest(deploymentFile); err != nil {
-		return err
-	}
+// func checkK8sManifestExists(deploymentFile, serviceFile string) error {
+// 	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
+// 		return fmt.Errorf("[!] Kubernetes manifest for %s-service not found", deploymentFile)
+// 	}
+// 	if _, err := os.Stat(serviceFile); os.IsNotExist(err) {
+// 		return fmt.Errorf("[!] Kubernetes service file for %s-service not found", serviceFile)
+// 	}
+// 	return nil
+// }
 
-	if err := applyK8sManifest(serviceFile); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func checkK8sManifestExists(deploymentFile, serviceFile string) error {
-	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
-		return fmt.Errorf("[!] Kubernetes manifest for %s-service not found", deploymentFile)
-	}
-	if _, err := os.Stat(serviceFile); os.IsNotExist(err) {
-		return fmt.Errorf("[!] Kubernetes service file for %s-service not found", serviceFile)
-	}
-	return nil
-}
-
-func applyK8sManifest(file string) error {
-	cmd := exec.Command("kubectl", "apply", "-f", file)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("[!] Failed to apply manifest %s: %v", file, err)
-	}
-	return nil
-}
+// func applyK8sManifest(file string) error {
+// 	cmd := exec.Command("kubectl", "apply", "-f", file)
+// 	if err := cmd.Run(); err != nil {
+// 		return fmt.Errorf("[!] Failed to apply manifest %s: %v", file, err)
+// 	}
+// 	return nil
+// }
