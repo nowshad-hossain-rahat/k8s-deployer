@@ -100,8 +100,6 @@ func DeployAlone(
 	fmt.Println("[+] Extracting current version of the Docker image and generating the next verison...")
 	currentVersion, _ := ParseVersion(dockerImagePath)
 
-	fmt.Printf("[+] Current version: %s\n", currentVersion)
-
 	dockerImagePath = ParseDockerImagePath(cfg, mode, serviceName, currentVersion)
 
 	return deploy(
@@ -178,10 +176,17 @@ func pushDockerImageToLive(cwd, dockerImagePath string) (string, error) {
 func deleteExistingDeployment(fullServiceName string) {
 	fmt.Println("[+] Deleting existing deployment...")
 
-	cmd := exec.Command("kubectl", "delete", fullServiceName+"-deployment")
+	cmd := exec.Command("kubectl", "delete", "deployment", fullServiceName+"-deployment")
 	cmd.Env = os.Environ()
 
+	var errOutput bytes.Buffer
+	cmd.Stderr = &errOutput
+
 	if err := cmd.Run(); err != nil {
+		if errOutput.Len() > 0 {
+			fmt.Println(errOutput.String())
+		}
+
 		fmt.Printf("[!] Failed to delete existing deployment or maybe there wasn't any deployment yet: %v\n", err)
 		return
 	}
